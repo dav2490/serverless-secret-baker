@@ -2,7 +2,7 @@
 
 const BbPromise = require("bluebird");
 const fs = require("fs");
-const secretsFile = "secret-baker-secrets.json";
+let secretsFile = "secret-baker-secrets.json";
 
 BbPromise.promisifyAll(fs);
 
@@ -32,7 +32,7 @@ class ServerlessSecretBaker {
       "after:invoke:local:invoke": this.cleanupPackageSecrets.bind(this),
     };
 
-    const shouldCleanup = options["secret-baker-cleanup"] != false;
+    const shouldCleanup = options["param"]["secret-baker-cleanup"] !== false;
 
     this.hooks = shouldCleanup ? { ...pkgHooks, ...cleanupHooks } : pkgHooks;
     this.options = options;
@@ -40,10 +40,10 @@ class ServerlessSecretBaker {
   }
 
   getSecretsConfig() {
-      const customPath = this.serverless.service.custom;
-      const configPath = customPath && customPath.secretBaker;
-      const secrets = configPath || [];
-
+      const secrets = (this.serverless.service.custom && this.serverless.service.custom.secretBaker && custom.secretBaker.secrets) || [];
+      const customSecretsFile = (this.serverless.service.custom && this.serverless.service.custom.secretBaker && custom.secretBaker.filePath) || undefined;
+      let secretsFile = customSecretsFile ? customSecretsFile : secretsFile;
+      
       if (Array.isArray(secrets)) {
           return secrets.map((item) => {
               if (typeof item === 'string') {
@@ -84,7 +84,7 @@ class ServerlessSecretBaker {
       };
     }
 
-    return fs.writeFileAsync(secretsFile, JSON.stringify(secrets));
+    return fs.writeFileAsync(customSecretsFile, JSON.stringify(secrets));
   }
 
   getParameterFromSsm(name) {
