@@ -1,11 +1,8 @@
 "use strict";
 
-const BbPromise = require("bluebird");
 const fs = require("fs");
 const defaultSecretsFile = "secret-baker-secrets.json";
 const optionsParamsRegex = /(?<key>[^=]+)=(?<value>.+)/;
-
-BbPromise.promisifyAll(fs);
 
 class ServerlessSecretBaker {
   constructor(serverless, options = {}) {
@@ -105,7 +102,7 @@ class ServerlessSecretBaker {
       };
     }
 
-    return fs.writeFileAsync(this.secretsFile, JSON.stringify(secrets));
+    return fs.promises.writeFile(this.secretsFile, JSON.stringify(secrets));
   }
 
   getParameterFromSsm(name) {
@@ -120,15 +117,14 @@ class ServerlessSecretBaker {
         },
         { useCache: true }
       ) // Use request cache
-      .then((response) => BbPromise.resolve(response.Parameter))
+      .then((response) => {
+        return response.Parameter;
+      })
       .catch((err) => {
         if (err.statusCode !== 400) {
-          return BbPromise.reject(
-            new this.serverless.classes.Error(err.message)
-          );
+          throw new this.serverless.classes.Error(err.message);
         }
-
-        return BbPromise.resolve(undefined);
+        return undefined;
       });
   }
 
