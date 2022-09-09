@@ -1,17 +1,14 @@
 "use strict";
 
-const BbPromise = require("bluebird");
 const fs = require("fs");
-const secretsFile = "secret-baker-secrets.json";
-
-BbPromise.promisifyAll(fs);
+const defaultSecretsFile = "secret-baker-secrets.json";
+const optionsParamsRegex = /(?<key>[^=]+)=(?<value>.+)/;
 
 class ServerlessSecretBaker {
   constructor(serverless, options = {}) {
     const pkgHooks = {
-      "before:package:createDeploymentArtifacts": this.packageSecrets.bind(
-        this
-      ),
+      "before:package:createDeploymentArtifacts":
+        this.packageSecrets.bind(this),
       "before:deploy:function:packageFunction": this.packageSecrets.bind(this),
       // For serverless-offline plugin
       "before:offline:start": this.packageSecrets.bind(this),
@@ -20,58 +17,79 @@ class ServerlessSecretBaker {
     };
 
     const cleanupHooks = {
-      "after:package:createDeploymentArtifacts": this.cleanupPackageSecrets.bind(
-        this
-      ),
-      "after:deploy:function:packageFunction": this.cleanupPackageSecrets.bind(
-        this
-      ),
+      "after:package:createDeploymentArtifacts":
+        this.cleanupPackageSecrets.bind(this),
+      "after:deploy:function:packageFunction":
+        this.cleanupPackageSecrets.bind(this),
       // For serverless-offline plugin
       "before:offline:start:end": this.cleanupPackageSecrets.bind(this),
       // For invoke local
       "after:invoke:local:invoke": this.cleanupPackageSecrets.bind(this),
     };
 
-    const shouldCleanup = options["secret-baker-cleanup"] != false;
+    const params = this.readParams(options.param || []);
+    const shouldCleanup = !params["secret-baker-cleanup"];
 
     this.hooks = shouldCleanup ? { ...pkgHooks, ...cleanupHooks } : pkgHooks;
     this.options = options;
     this.serverless = serverless;
+    this.secretsFile = defaultSecretsFile;
+  }
+
+  readParams(params) {
+    const resultParams = {};
+    for (const item of params) {
+      for (const splitted of item.split(",")) {
+        const res = splitted.match(optionsParamsRegex);
+        resultParams[res.groups.key] = {
+          value: res.groups.value.trimEnd(),
+          type: "cli",
+        };
+      }
+    }
+    return resultParams;
   }
 
   getSecretsConfig() {
-      const customPath = this.serverless.service.custom;
-      const configPath = customPath && customPath.secretBaker;
-      const secrets = configPath || [];
+    const secrets =
+      (this.serverless.service.custom &&
+        this.serverless.service.custom.secretBaker &&
+        this.serverless.service.custom.secretBaker.secrets) ||
+      [];
+    const customSecretsFile =
+      (this.serverless.service.custom &&
+        this.serverless.service.custom.secretBaker &&
+        this.serverless.service.custom.secretBaker.filePath) ||
+      undefined;
+    this.secretsFile = customSecretsFile ? customSecretsFile : this.secretsFile;
 
-      if (Array.isArray(secrets)) {
-          return secrets.map((item) => {
-              if (typeof item === 'string') {
-                  return {
-                      name: item,
-                      path: item
-                  }
-              } else {
-                  return item
-              }
-          })
-      } else if (typeof secrets === 'object') {
-          return Object.entries(secrets).map(([name, path]) => ({
-              name,
-              path
-          }));
-      }
-      throw new this.serverless.classes.Error(
-          "Secret Baker configuration contained an unexpected value."
-      );
+    if (Array.isArray(secrets)) {
+      return secrets.map((item) => {
+        if (typeof item === "string") {
+          return {
+            name: item,
+            path: item,
+          };
+        } else {
+          return item;
+        }
+      });
+    } else if (typeof secrets === "object") {
+      return Object.entries(secrets).map(([name, path]) => ({
+        name,
+        path,
+      }));
+    }
+    throw new this.serverless.classes.Error(
+      "Secret Baker configuration contained an unexpected value."
+    );
   }
 
   async writeSecretToFile() {
     const providerSecrets = this.getSecretsConfig();
     const secrets = {};
 
-
-    for (const {name, path} of providerSecrets) {
+    for (const { name, path } of providerSecrets) {
       const param = await this.getParameterFromSsm(path);
 
       if (!param) {
@@ -80,11 +98,11 @@ class ServerlessSecretBaker {
 
       secrets[name] = {
         ciphertext: param.Value,
-        arn: param.ARN
+        arn: param.ARN,
       };
     }
 
-    return fs.writeFileAsync(secretsFile, JSON.stringify(secrets));
+    return fs.promises.writeFile(this.secretsFile, JSON.stringify(secrets));
   }
 
   getParameterFromSsm(name) {
@@ -95,25 +113,24 @@ class ServerlessSecretBaker {
         "getParameter",
         {
           Name: name,
-          WithDecryption: false
+          WithDecryption: false,
         },
         { useCache: true }
       ) // Use request cache
-      .then(response => BbPromise.resolve(response.Parameter))
-      .catch(err => {
+      .then((response) => {
+        return response.Parameter;
+      })
+      .catch((err) => {
         if (err.statusCode !== 400) {
-          return BbPromise.reject(
-            new this.serverless.classes.Error(err.message)
-          );
+          throw new this.serverless.classes.Error(err.message);
         }
-
-        return BbPromise.resolve(undefined);
+        return undefined;
       });
   }
 
   cleanupPackageSecrets() {
-    this.serverless.cli.log(`Cleaning up ${secretsFile}`);
-    if (fs.existsSync(secretsFile)) fs.unlinkSync(secretsFile);
+    this.serverless.cli.log(`Cleaning up ${this.secretsFile}`);
+    if (fs.existsSync(this.secretsFile)) fs.unlinkSync(this.secretsFile);
   }
 
   packageSecrets() {
@@ -121,7 +138,7 @@ class ServerlessSecretBaker {
     this.serverless.service.package.include =
       this.serverless.service.package.include || [];
     return this.writeSecretToFile().then(() =>
-      this.serverless.service.package.include.push(secretsFile)
+      this.serverless.service.package.include.push(this.secretsFile)
     );
   }
 }
