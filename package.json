@@ -7,7 +7,7 @@
     "check-version": "node ./scripts/check-version.js",
     "test": "mocha \"tests/**/*.test.js\"",
     "test-ci": "./scripts/run-tests-coverage",
-    "test-coverage": "nyc --reporter lcov npm test",
+    "test-coverage": "nyc --reporter lcov yarn test",
     "test-watch": "mocha \"tests/**/*.test.js\" --watch"
   },
   "files": [],
