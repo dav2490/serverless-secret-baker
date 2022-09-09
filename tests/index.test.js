@@ -16,7 +16,9 @@ const makeServerless = () => ({
     package: {},
     provider: {},
     custom: {
-      secretBaker: {},
+      secretBaker: {
+        secrets: {},
+      },
     },
   },
   getProvider: () => {},
@@ -29,13 +31,13 @@ describe("ServerlessSecretBaker", () => {
   });
 
   beforeEach(() => {
-    sinon.stub(fs, "writeFileAsync");
+    sinon.stub(fs.promises, "writeFile");
     sinon.stub(fs, "existsSync");
     sinon.stub(fs, "unlinkSync");
   });
 
   afterEach(() => {
-    fs.writeFileAsync.restore();
+    fs.promises.writeFile.restore();
     fs.existsSync.restore();
     fs.unlinkSync.restore();
   });
@@ -44,7 +46,7 @@ describe("ServerlessSecretBaker", () => {
     const serverless = makeServerless();
     const bakedGoods = new ServerlessSecretBaker(serverless);
     await bakedGoods.packageSecrets();
-    expect(fs.writeFileAsync).to.have.been.calledWith(
+    expect(fs.promises.writeFile).to.have.been.calledWith(
       SECRETS_FILE,
       sinon.match.any
     );
@@ -62,7 +64,7 @@ describe("ServerlessSecretBaker", () => {
   it("should not clean up the correct secrets file with CLI option to not cleanup", () => {
     const serverless = makeServerless();
     const bakedGoods = new ServerlessSecretBaker(serverless, {
-      "secret-baker-cleanup": false,
+      param: ["secret-baker-cleanup=false,something=else,even=all"],
     });
     fs.existsSync.returns(false);
     fs.existsSync.withArgs(SECRETS_FILE).returns(true);
@@ -88,9 +90,9 @@ describe("ServerlessSecretBaker", () => {
       bakedGoods = new ServerlessSecretBaker(serverless);
     });
 
-    it('should write an empty json object to the output file.', async () => {
+    it("should write an empty json object to the output file.", async () => {
       await bakedGoods.writeSecretToFile();
-      const secretsJson = fs.writeFileAsync.firstCall.args[1];
+      const secretsJson = fs.promises.writeFile.firstCall.args[1];
       const secrets = JSON.parse(secretsJson);
 
       expect(secrets).to.be.empty;
@@ -103,14 +105,14 @@ describe("ServerlessSecretBaker", () => {
 
     beforeEach(() => {
       serverless = makeServerless();
-      serverless.service.custom.secretBaker = 5;
+      serverless.service.custom.secretBaker.secrets = 5;
       bakedGoods = new ServerlessSecretBaker(serverless);
     });
 
-    it('should write an empty json object to the output file.', async () => {
+    it("should write an empty json object to the output file.", async () => {
       expect(bakedGoods.writeSecretToFile()).to.be.rejected;
     });
-  })
+  });
 
   describe("With Secrets Object", () => {
     const expectedSecretName = "MY_SECRET";
@@ -123,20 +125,19 @@ describe("ServerlessSecretBaker", () => {
 
     beforeEach(() => {
       serverless = makeServerless();
-      serverless.service.custom.secretBaker[
-        expectedSecretName
-      ] = expectedParameterStoreKey;
+      serverless.service.custom.secretBaker.secrets[expectedSecretName] =
+        expectedParameterStoreKey;
       bakedGoods = new ServerlessSecretBaker(serverless);
       sinon.stub(bakedGoods, "getParameterFromSsm");
       bakedGoods.getParameterFromSsm.resolves({
         Value: expectedCiphertext,
-        ARN: expectedArn
+        ARN: expectedArn,
       });
     });
 
     it("should write ciphertext for secret to secrets file on package", async () => {
       await bakedGoods.writeSecretToFile();
-      const secretsJson = fs.writeFileAsync.firstCall.args[1];
+      const secretsJson = fs.promises.writeFile.firstCall.args[1];
       const secrets = JSON.parse(secretsJson);
 
       expect(secrets[expectedSecretName].ciphertext).to.equal(
@@ -146,7 +147,7 @@ describe("ServerlessSecretBaker", () => {
 
     it("should write ARN from secret to secrets file on package", async () => {
       await bakedGoods.writeSecretToFile();
-      const secretsJson = fs.writeFileAsync.firstCall.args[1];
+      const secretsJson = fs.promises.writeFile.firstCall.args[1];
       const secrets = JSON.parse(secretsJson);
 
       expect(secrets[expectedSecretName].arn).to.equal(expectedArn);
@@ -176,18 +177,18 @@ describe("ServerlessSecretBaker", () => {
 
     beforeEach(() => {
       serverless = makeServerless();
-      serverless.service.custom.secretBaker = [expectedSecretName];
+      serverless.service.custom.secretBaker.secrets = [expectedSecretName];
       bakedGoods = new ServerlessSecretBaker(serverless);
       sinon.stub(bakedGoods, "getParameterFromSsm");
       bakedGoods.getParameterFromSsm.resolves({
         Value: expectedCiphertext,
-        ARN: expectedArn
+        ARN: expectedArn,
       });
     });
 
     it("should write ciphertext for secret to secrets file on package", async () => {
       await bakedGoods.writeSecretToFile();
-      const secretsJson = fs.writeFileAsync.firstCall.args[1];
+      const secretsJson = fs.promises.writeFile.firstCall.args[1];
       const secrets = JSON.parse(secretsJson);
 
       expect(secrets[expectedSecretName].ciphertext).to.equal(
@@ -197,7 +198,7 @@ describe("ServerlessSecretBaker", () => {
 
     it("should write ARN from secret to secrets file on package", async () => {
       await bakedGoods.writeSecretToFile();
-      const secretsJson = fs.writeFileAsync.firstCall.args[1];
+      const secretsJson = fs.promises.writeFile.firstCall.args[1];
       const secrets = JSON.parse(secretsJson);
 
       expect(secrets[expectedSecretName].arn).to.equal(expectedArn);
@@ -212,14 +213,14 @@ describe("ServerlessSecretBaker", () => {
     it("should call getParameterFromSsm with the correct parameter key", async () => {
       await bakedGoods.writeSecretToFile();
       expect(bakedGoods.getParameterFromSsm).to.have.been.calledWith(
-          expectedSecretName
+        expectedSecretName
       );
     });
   });
 
   describe("With Secrets Object Array", () => {
     const expectedSecretName = "MY_SECRET";
-    const expectedParameterStoreKey = "MY_PARAMETER_STORE_KEY"
+    const expectedParameterStoreKey = "MY_PARAMETER_STORE_KEY";
     const expectedCiphertext = "SECRET VALUE CIPHERTEXT";
     const expectedArn = "SECRET VALUE CIPHERTEXT";
 
@@ -228,7 +229,7 @@ describe("ServerlessSecretBaker", () => {
 
     beforeEach(() => {
       serverless = makeServerless();
-      serverless.service.custom.secretBaker = [
+      serverless.service.custom.secretBaker.secrets = [
         {
           name: expectedSecretName,
           path: expectedParameterStoreKey,
@@ -238,13 +239,13 @@ describe("ServerlessSecretBaker", () => {
       sinon.stub(bakedGoods, "getParameterFromSsm");
       bakedGoods.getParameterFromSsm.resolves({
         Value: expectedCiphertext,
-        ARN: expectedArn
+        ARN: expectedArn,
       });
     });
 
     it("should write ciphertext for secret to secrets file on package", async () => {
       await bakedGoods.writeSecretToFile();
-      const secretsJson = fs.writeFileAsync.firstCall.args[1];
+      const secretsJson = fs.promises.writeFile.firstCall.args[1];
       const secrets = JSON.parse(secretsJson);
 
       expect(secrets[expectedSecretName].ciphertext).to.equal(
@@ -254,7 +255,7 @@ describe("ServerlessSecretBaker", () => {
 
     it("should write ARN from secret to secrets file on package", async () => {
       await bakedGoods.writeSecretToFile();
-      const secretsJson = fs.writeFileAsync.firstCall.args[1];
+      const secretsJson = fs.promises.writeFile.firstCall.args[1];
       const secrets = JSON.parse(secretsJson);
 
       expect(secrets[expectedSecretName].arn).to.equal(expectedArn);
@@ -269,7 +270,7 @@ describe("ServerlessSecretBaker", () => {
     it("should call getParameterFromSsm with the correct parameter key", async () => {
       await bakedGoods.writeSecretToFile();
       expect(bakedGoods.getParameterFromSsm).to.have.been.calledWith(
-          expectedParameterStoreKey
+        expectedParameterStoreKey
       );
     });
   });
