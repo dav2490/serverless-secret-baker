@@ -21,10 +21,9 @@
     "url": "https://github.com/vacasaoss/serverless-secret-baker/issues"
   },
   "homepage": "https://github.com/vacasaoss/serverless-secret-baker#readme",
-  "dependencies": {
-    "aws-sdk": "^2.715.0"
-  },
+  "dependencies": {},
   "devDependencies": {
+    "aws-sdk": "^2.715.0",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "mocha": "^8.3.2",
