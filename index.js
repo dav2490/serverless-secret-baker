@@ -10,9 +10,8 @@ BbPromise.promisifyAll(fs);
 class ServerlessSecretBaker {
   constructor(serverless, options = {}) {
     const pkgHooks = {
-      "before:package:createDeploymentArtifacts": this.packageSecrets.bind(
-        this
-      ),
+      "before:package:createDeploymentArtifacts":
+        this.packageSecrets.bind(this),
       "before:deploy:function:packageFunction": this.packageSecrets.bind(this),
       // For serverless-offline plugin
       "before:offline:start": this.packageSecrets.bind(this),
@@ -21,12 +20,10 @@ class ServerlessSecretBaker {
     };
 
     const cleanupHooks = {
-      "after:package:createDeploymentArtifacts": this.cleanupPackageSecrets.bind(
-        this
-      ),
-      "after:deploy:function:packageFunction": this.cleanupPackageSecrets.bind(
-        this
-      ),
+      "after:package:createDeploymentArtifacts":
+        this.cleanupPackageSecrets.bind(this),
+      "after:deploy:function:packageFunction":
+        this.cleanupPackageSecrets.bind(this),
       // For serverless-offline plugin
       "before:offline:start:end": this.cleanupPackageSecrets.bind(this),
       // For invoke local
@@ -57,38 +54,45 @@ class ServerlessSecretBaker {
   }
 
   getSecretsConfig() {
-      const secrets = (this.serverless.service.custom && this.serverless.service.custom.secretBaker && custom.secretBaker.secrets) || [];
-      const customSecretsFile = (this.serverless.service.custom && this.serverless.service.custom.secretBaker && custom.secretBaker.filePath) || undefined;
-      this.secretsFile = customSecretsFile ? customSecretsFile : this.secretsFile;
-      
-      if (Array.isArray(secrets)) {
-          return secrets.map((item) => {
-              if (typeof item === 'string') {
-                  return {
-                      name: item,
-                      path: item
-                  }
-              } else {
-                  return item
-              }
-          })
-      } else if (typeof secrets === 'object') {
-          return Object.entries(secrets).map(([name, path]) => ({
-              name,
-              path
-          }));
-      }
-      throw new this.serverless.classes.Error(
-          "Secret Baker configuration contained an unexpected value."
-      );
+    const secrets =
+      (this.serverless.service.custom &&
+        this.serverless.service.custom.secretBaker &&
+        this.serverless.service.custom.secretBaker.secrets) ||
+      [];
+    const customSecretsFile =
+      (this.serverless.service.custom &&
+        this.serverless.service.custom.secretBaker &&
+        this.serverless.service.custom.secretBaker.filePath) ||
+      undefined;
+    this.secretsFile = customSecretsFile ? customSecretsFile : this.secretsFile;
+
+    if (Array.isArray(secrets)) {
+      return secrets.map((item) => {
+        if (typeof item === "string") {
+          return {
+            name: item,
+            path: item,
+          };
+        } else {
+          return item;
+        }
+      });
+    } else if (typeof secrets === "object") {
+      return Object.entries(secrets).map(([name, path]) => ({
+        name,
+        path,
+      }));
+    }
+    throw new this.serverless.classes.Error(
+      "Secret Baker configuration contained an unexpected value."
+    );
   }
 
   async writeSecretToFile() {
     const providerSecrets = this.getSecretsConfig();
     const secrets = {};
 
-
-    for (const {name, path} of providerSecrets) {
+    for (const { name, path } of providerSecrets) {
       const param = await this.getParameterFromSsm(path);
 
       if (!param) {
@@ -97,7 +101,7 @@ class ServerlessSecretBaker {
 
       secrets[name] = {
         ciphertext: param.Value,
-        arn: param.ARN
+        arn: param.ARN,
       };
     }
 
@@ -112,12 +116,12 @@ class ServerlessSecretBaker {
         "getParameter",
         {
           Name: name,
-          WithDecryption: false
+          WithDecryption: false,
         },
         { useCache: true }
       ) // Use request cache
-      .then(response => BbPromise.resolve(response.Parameter))
-      .catch(err => {
+      .then((response) => BbPromise.resolve(response.Parameter))
+      .catch((err) => {
         if (err.statusCode !== 400) {
           return BbPromise.reject(
             new this.serverless.classes.Error(err.message)
