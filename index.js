@@ -3,6 +3,7 @@
 const BbPromise = require("bluebird");
 const fs = require("fs");
 const defaultSecretsFile = "secret-baker-secrets.json";
+const optionsParamsRegex = /(?<key>[^=]+)=(?<value>.+)/;
 
 BbPromise.promisifyAll(fs);
 
@@ -32,12 +33,27 @@ class ServerlessSecretBaker {
       "after:invoke:local:invoke": this.cleanupPackageSecrets.bind(this),
     };
 
-    const shouldCleanup = options["param"]["secret-baker-cleanup"] !== false;
+    const params = this.readParams(options.param || []);
+    const shouldCleanup = !params["secret-baker-cleanup"];
 
     this.hooks = shouldCleanup ? { ...pkgHooks, ...cleanupHooks } : pkgHooks;
     this.options = options;
     this.serverless = serverless;
     this.secretsFile = defaultSecretsFile;
+  }
+
+  readParams(params) {
+    const resultParams = {};
+    for (const item of params) {
+      for (const splitted of item.split(",")) {
+        const res = splitted.match(optionsParamsRegex);
+        resultParams[res.groups.key] = {
+          value: res.groups.value.trimEnd(),
+          type: "cli",
+        };
+      }
+    }
+    return resultParams;
   }
 
   getSecretsConfig() {
