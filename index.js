@@ -2,7 +2,7 @@
 
 const BbPromise = require("bluebird");
 const fs = require("fs");
-let secretsFile = "secret-baker-secrets.json";
+const defaultSecretsFile = "secret-baker-secrets.json";
 
 BbPromise.promisifyAll(fs);
 
@@ -37,12 +37,13 @@ class ServerlessSecretBaker {
     this.hooks = shouldCleanup ? { ...pkgHooks, ...cleanupHooks } : pkgHooks;
     this.options = options;
     this.serverless = serverless;
+    this.secretsFile = defaultSecretsFile;
   }
 
   getSecretsConfig() {
       const secrets = (this.serverless.service.custom && this.serverless.service.custom.secretBaker && custom.secretBaker.secrets) || [];
       const customSecretsFile = (this.serverless.service.custom && this.serverless.service.custom.secretBaker && custom.secretBaker.filePath) || undefined;
-      let secretsFile = customSecretsFile ? customSecretsFile : secretsFile;
+      this.secretsFile = customSecretsFile ? customSecretsFile : this.secretsFile;
       
       if (Array.isArray(secrets)) {
           return secrets.map((item) => {
@@ -84,7 +85,7 @@ class ServerlessSecretBaker {
       };
     }
 
-    return fs.writeFileAsync(customSecretsFile, JSON.stringify(secrets));
+    return fs.writeFileAsync(this.secretsFile, JSON.stringify(secrets));
   }
 
   getParameterFromSsm(name) {
@@ -112,8 +113,8 @@ class ServerlessSecretBaker {
   }
 
   cleanupPackageSecrets() {
-    this.serverless.cli.log(`Cleaning up ${secretsFile}`);
-    if (fs.existsSync(secretsFile)) fs.unlinkSync(secretsFile);
+    this.serverless.cli.log(`Cleaning up ${this.secretsFile}`);
+    if (fs.existsSync(this.secretsFile)) fs.unlinkSync(this.secretsFile);
   }
 
   packageSecrets() {
@@ -121,7 +122,7 @@ class ServerlessSecretBaker {
     this.serverless.service.package.include =
       this.serverless.service.package.include || [];
     return this.writeSecretToFile().then(() =>
-      this.serverless.service.package.include.push(secretsFile)
+      this.serverless.service.package.include.push(this.secretsFile)
     );
   }
 }
